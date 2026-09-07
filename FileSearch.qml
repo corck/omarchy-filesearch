@@ -72,8 +72,10 @@ Item {
   property int thumbSize: root.rowHeight
   // Above this, a thumbnail costs more than it is worth at this size.
   readonly property int maxThumbBytes: 25 * 1024 * 1024
-  // Wide enough for "yesterday HH:mm", the longest string formatMtime produces.
-  property int dateWidth: Style.space(96)
+  // Wide enough for "yesterday HH:mm", the longest string formatMtime
+  // produces: 110 px at the date's font size, measured in the shell's
+  // monospace face.
+  property int dateWidth: Style.space(118)
 
   // A `query` in the payload opens the overlay with the search already
   // running, so a menu entry or script can hand off a term:
@@ -1127,7 +1129,7 @@ Item {
                     color: row.hasCursor ? root.selectedText : root.foreground
                     opacity: row.hasCursor ? 0.75 : 0.5
                     font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
+                    font.pixelSize: Style.font.caption + 2
                     horizontalAlignment: Text.AlignRight
                     verticalAlignment: Text.AlignVCenter
                   }
@@ -1207,7 +1209,7 @@ Item {
                 color: root.foreground
                 opacity: 0.45
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.caption + 1
                 horizontalAlignment: Text.AlignHCenter
                 width: parent.width
               }
@@ -1407,7 +1409,7 @@ Item {
             color: root.foreground
             opacity: 0.45
             font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
+            font.pixelSize: Style.font.caption + 1
             elide: Text.ElideRight
           }
 
@@ -1423,7 +1425,7 @@ Item {
             color: root.foreground
             opacity: 0.45
             font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
+            font.pixelSize: Style.font.caption + 1
           }
         }
       }
