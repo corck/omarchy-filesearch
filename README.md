@@ -153,8 +153,8 @@ just a filename.
   has no text to find.
 - Results are ordered by the index's relevance, not by date.
 - Filenames containing a newline are skipped by the helper scripts.
-- Thumbnails are skipped above 25 MB, where decoding costs more than the
-  38-pixel preview is worth.
+- Thumbnails are skipped above 25 MB, where decoding costs more than a
+  row-height preview is worth. The large preview honours the same limit.
 
 ## License
 
