@@ -87,13 +87,17 @@ omarchy plugin remove io.github.corck.filesearch
 omarchy restart shell
 ```
 
-That deletes the plugin and drops its bar widget from
-`~/.config/omarchy/shell.json`. Two things it cannot clean up, because they
-are yours:
+That drops the bar widget from `~/.config/omarchy/shell.json` and deletes the
+plugin folder. Because the folder is a git checkout, it is removed outright
+rather than backed up — Omarchy assumes the repository is still upstream, so
+back up any local edits first.
 
-1. The keybinding you added to `~/.config/hypr/bindings.lua` — delete the
-   `o.bind` line and run `hyprctl reload`.
-2. Nothing else. The plugin writes no state, no cache and no config of its own.
+One thing it cannot clean up, because it is yours: the keybinding in
+`~/.config/hypr/bindings.lua`. Delete the `o.bind` line and run
+`hyprctl reload`.
+
+Nothing else is left behind. The plugin writes no state, no cache and no
+config of its own.
 
 To disable it without uninstalling:
 
