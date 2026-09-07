@@ -16,7 +16,9 @@ home directory, but nothing exposes that index to the keyboard. This does.
   whose text says "invoice" still shows up.
 - **Prefixes** to narrow the search: `f:` filenames, `o:` folders,
   `d:` documents, `i:` images. Without one it searches content *and* names,
-  filename matches first.
+  filename matches first. `d:` and `i:` restrict the results to that file type
+  and match both its filename and whatever the index extracted from it — an
+  image's embedded title, a document's text.
 - **Thumbnails** for images, glyphs for everything else, at full row height.
 - **Modified date** per hit, `today HH:mm` / `yesterday HH:mm` for recent files.
 - **Preview pane** on <kbd>Tab</kbd>: images enlarged, folders listed and

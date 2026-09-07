@@ -35,12 +35,29 @@ read -r -a terms <<<"$query"
 # yields no rows and the next keystroke tries again.
 run() { timeout 5 localsearch search "$@" --limit "$LIMIT" -- "${terms[@]}" 2>/dev/null; }
 
+# --images and --documents match what the extractor pulled out of a file --
+# an image's dc:title, a document's text -- and never its filename. On their
+# own they make "i:holiday" come up empty for a folder full of holiday photos,
+# which reads as broken. So those modes also run a filename pass and keep only
+# the rows whose extension fits the type.
+ext_filter=""
+case "$mode" in
+images) ext_filter="png|jpg|jpeg|gif|webp|svg|bmp|tif|tiff|heic|avif" ;;
+documents) ext_filter="pdf|doc|docx|odt|rtf|txt|md|xls|xlsx|ods|csv|ppt|pptx|odp|epub" ;;
+esac
+
 collect() {
   case "$mode" in
   files) run --files ;;
   folders) run --folders ;;
-  documents) run --documents ;;
-  images) run --images ;;
+  documents)
+    run --documents
+    run --files
+    ;;
+  images)
+    run --images
+    run --files
+    ;;
   # Filename hits first: when both match, the name match is the one the
   # user was almost certainly aiming at.
   *)
@@ -66,6 +83,13 @@ while IFS= read -r uri; do
 
   # The index outlives the files it points at; a deleted file is a stale row.
   [[ -e $path ]] || continue
+
+  # A typed mode keeps only that type. Directories stay out of it -- a folder
+  # is not an image, and "i:" asked for images.
+  if [[ -n $ext_filter ]]; then
+    lower=${path,,}
+    [[ $lower =~ \.($ext_filter)$ ]] || continue
+  fi
 
   paths+=("$path")
   if [[ -d $path ]]; then kinds+=("dir"); else kinds+=("file"); fi
