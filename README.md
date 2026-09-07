@@ -32,7 +32,6 @@ home directory, but nothing exposes that index to the keyboard. This does.
 The index itself does the work, so it has to be running:
 
 ```bash
-systemctl --user status localsearch-3
 localsearch status          # should report indexed files, not an error
 ```
 
@@ -90,9 +89,9 @@ omarchy restart shell
 ```
 
 That drops the bar widget from `~/.config/omarchy/shell.json` and deletes the
-plugin folder. Because the folder is a git checkout, it is removed outright
-rather than backed up — Omarchy assumes the repository is still upstream, so
-back up any local edits first.
+plugin folder. Because the folder is a git working copy, it is removed
+outright rather than backed up — Omarchy assumes the repository is still
+upstream, so back up any local edits first.
 
 One thing it cannot clean up, because it is yours: the keybinding in
 `~/.config/hypr/bindings.lua`. Delete the `o.bind` line and run
