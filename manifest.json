@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.corck.filesearch",
+  "name": "File search",
+  "version": "1.0.0",
+  "author": "Christoph Klocker",
+  "description": "KRunner-style overlay that searches the localsearch full-text index",
+  "kinds": [
+    "overlay",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "FileSearch.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "File search",
+    "description": "Opens the localsearch file search overlay",
+    "category": "System",
+    "defaultSection": "left",
+    "allowMultiple": false
+  }
+}
