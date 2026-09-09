@@ -25,8 +25,8 @@ home directory, but nothing exposes that index to the keyboard. This does.
   navigable in place, everything else as name, path, type, size and date.
 - **Actions** on the selection: open, reveal in the file manager, terminal in
   the folder, open in your editor, copy the path, move to trash or delete.
-- A bar widget, if you want to click instead of type — the one way in that
-  works the moment you install it, before you have bound a key.
+- A bar widget — a magnifying glass () in the bar. The one way in that
+  works the moment you install it, before you have bound anything.
 
 ## Requirements
 
@@ -78,12 +78,12 @@ omarchy restart shell
 That installs the overlay and puts the bar widget in the left section. Move it
 with `omarchy bar move io.github.corck.filesearch --section right`.
 
-**2. Bind a key — this step is not optional.**
+**2. Bind a key.**
 
-Installing the plugin does *not* give you a keyboard shortcut. Omarchy's plugin
-system never writes to your Hyprland config, so until you add a binding the
-only way to open the overlay is clicking the bar widget. Add one to
-`~/.config/hypr/bindings.lua`:
+Installing the plugin does *not* give you a keyboard shortcut, and it cannot:
+Omarchy's plugin system never writes to your Hyprland config. Until you do one
+of this step or the next, the only way to open the overlay is clicking the bar
+widget. Add a binding to `~/.config/hypr/bindings.lua`:
 
 ```lua
 o.bind("F3", "File search", "omarchy-shell shell toggle io.github.corck.filesearch '{}'")
@@ -99,7 +99,21 @@ o.bind("SUPER + CTRL + F", "File search", "omarchy-shell shell toggle io.github.
 Binding both is fine — they are ordinary Hyprland bindings running the same
 command, and the command toggles, so the same key closes the overlay again.
 
-**3. Reload Hyprland.**
+**3. Optional: add it to the Omarchy menu.**
+
+If you would rather reach it from <kbd>Super</kbd>+<kbd>Space</kbd> than from a
+dedicated key, add a row to `~/.config/omarchy/extensions/omarchy-menu.jsonc`:
+
+```jsonc
+"find": {"icon":"","label":"Find","aliases":["search"],"description":"Search file contents and names via the localsearch index","action":"omarchy-shell shell toggle io.github.corck.filesearch '{}'"},
+```
+
+The menu watches that file, so the row appears as soon as you save — no
+restart. It is then also reachable as `omarchy menu summon find`.
+
+**4. Reload Hyprland.**
+
+Only needed for the keybinding in step 2:
 
 ```bash
 hyprctl reload
@@ -117,9 +131,10 @@ plugin folder. Because the folder is a git working copy, it is removed
 outright rather than backed up — Omarchy assumes the repository is still
 upstream, so back up any local edits first.
 
-One thing it cannot clean up, because it is yours: the keybinding in
-`~/.config/hypr/bindings.lua`. Delete the `o.bind` line and run
-`hyprctl reload`.
+Two things it cannot clean up, because they are yours: the keybinding in
+`~/.config/hypr/bindings.lua` — delete the `o.bind` line and run
+`hyprctl reload` — and, if you added it, the `"find"` row in
+`~/.config/omarchy/extensions/omarchy-menu.jsonc`.
 
 Nothing else is left behind. The plugin writes no state, no cache and no
 config of its own.
