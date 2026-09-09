@@ -13,7 +13,7 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     text: "\uf002"
-    tooltipText: "File search (F3 / SUPER + CTRL + F)"
+    tooltipText: "File search"
     onPressed: function (button) {
       if (!root.bar)
         return

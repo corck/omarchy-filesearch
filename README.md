@@ -1,8 +1,8 @@
 # File Search
 
 A search overlay for the [Omarchy](https://omarchy.org) shell, backed by the
-**localsearch** full-text index — the GNOME equivalent of KDE's Baloo. Press a
-key, type, and get files matching by *content* as well as by name, with
+**localsearch** full-text index — the GNOME equivalent of KDE's Baloo. Bind a
+key, press it, and type: files match by *content* as well as by name, with
 thumbnails, dates and a preview pane.
 
 Omarchy already ships localsearch as a Nautilus dependency and indexes your
@@ -25,7 +25,8 @@ home directory, but nothing exposes that index to the keyboard. This does.
   navigable in place, everything else as name, path, type, size and date.
 - **Actions** on the selection: open, reveal in the file manager, terminal in
   the folder, open in your editor, copy the path, move to trash or delete.
-- A bar widget, if you want to click instead of type.
+- A bar widget, if you want to click instead of type — the one way in that
+  works the moment you install it, before you have bound a key.
 
 ## Requirements
 
@@ -67,19 +68,42 @@ the containing directory with `xdg-open`.
 
 ## Install
 
+**1. Add the plugin.**
+
 ```bash
 omarchy plugin add https://github.com/corck/omarchy-filesearch --enable
 omarchy restart shell
 ```
 
-Then bind a key in `~/.config/hypr/bindings.lua`:
+That installs the overlay and puts the bar widget in the left section. Move it
+with `omarchy bar move io.github.corck.filesearch --section right`.
+
+**2. Bind a key — this step is not optional.**
+
+Installing the plugin does *not* give you a keyboard shortcut. Omarchy's plugin
+system never writes to your Hyprland config, so until you add a binding the
+only way to open the overlay is clicking the bar widget. Add one to
+`~/.config/hypr/bindings.lua`:
 
 ```lua
 o.bind("F3", "File search", "omarchy-shell shell toggle io.github.corck.filesearch '{}'")
 ```
 
-Reload with `hyprctl reload`. The bar widget is added to the left section on
-`--enable`; move it with `omarchy bar move io.github.corck.filesearch --section right`.
+Pick whatever key you like — <kbd>F3</kbd> and <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>F</kbd>
+are both unused by stock Omarchy, so either is a safe default:
+
+```lua
+o.bind("SUPER + CTRL + F", "File search", "omarchy-shell shell toggle io.github.corck.filesearch '{}'")
+```
+
+Binding both is fine — they are ordinary Hyprland bindings running the same
+command, and the command toggles, so the same key closes the overlay again.
+
+**3. Reload Hyprland.**
+
+```bash
+hyprctl reload
+```
 
 ## Remove
 
@@ -107,6 +131,9 @@ omarchy plugin disable io.github.corck.filesearch
 ```
 
 ## Keys
+
+These are the keys *inside* the overlay. The key that opens it is whichever one
+you bound yourself — see [Install](#install).
 
 | | |
 |---|---|
