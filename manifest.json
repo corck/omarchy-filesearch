@@ -4,7 +4,7 @@
   "name": "File search",
   "version": "1.0.0",
   "author": "Christoph Klocker",
-  "description": "KRunner-style overlay that searches the localsearch full-text index",
+  "description": "Full-text file search overlay for the localsearch index. Bind a key to open it, or click the bar widget.",
   "kinds": [
     "overlay",
     "bar-widget"
