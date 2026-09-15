@@ -23,6 +23,27 @@ Item {
   readonly property string scriptPath: decodeURIComponent(Qt.resolvedUrl("search.sh").toString().replace(/^file:\/\//, ""))
   readonly property int minQueryLength: 2
 
+  // --- Sort and type filter ------------------------------------------------
+  //
+  // Both act on the rows a query already returned, never on the query itself:
+  // flipping the order or picking a type is a re-render, not a second trip
+  // through localsearch. `allRows` is everything the search found and
+  // resultsModel is the view of it the list shows, so the two can disagree
+  // and only one of them is ever on screen.
+  property var allRows: []
+  property bool newestFirst: true
+  property string typeFilter: "all"
+  readonly property var typeFilters: [
+    { id: "all", label: "All" },
+    { id: "dir", label: "Folders" },
+    { id: "file", label: "Files" },
+    { id: "doc", label: "Documents" },
+    { id: "image", label: "Images" },
+    { id: "video", label: "Videos" }
+  ]
+  readonly property bool filtersVisible: root.allRows.length > 0
+  property int filterBarHeight: Math.max(Style.space(24), Style.font.caption + Style.space(12))
+
   // Deletes run one at a time through a queue: hold Delete down and the rows
   // are removed in order instead of racing several processes at once.
   property var deleteQueue: []
@@ -61,6 +82,23 @@ Item {
   property string queuedFolderPath: ""
   property bool hasQueuedFolder: false
 
+  // --- Thumbnails ----------------------------------------------------------
+  //
+  // The picture a file manager shows for a PDF or a video comes out of the
+  // desktop's shared thumbnail cache; thumb.sh finds it there, or has the
+  // system thumbnailer registered for that file type make one. Only ever for
+  // the row the preview pane is showing, and debounced, so holding an arrow
+  // key down does not start a thumbnailer per keystroke.
+  readonly property string thumbScript: decodeURIComponent(Qt.resolvedUrl("thumb.sh").toString().replace(/^file:\/\//, ""))
+  property string previewThumb: ""
+  property string wantedThumbPath: ""
+  property string activeThumbPath: ""
+  // Files a thumbnailer has already declined. Plenty of types have a
+  // thumbnailer that only succeeds sometimes -- an .odt carries a preview
+  // image, an .odt written by something that skipped it does not -- and
+  // without this, every pass over such a row pays for the attempt again.
+  property var thumbMisses: ({})
+
   // Widening the card beats splitting the old width: at 950 px a 42% pane
   // would squeeze the result rows into ellipses.
   property int cardWidth: Math.min(Style.space(root.previewOpen ? 1340 : 950), panel.width - Style.gapsOut * 2)
@@ -92,7 +130,10 @@ Item {
     root.query = ""
     root.selectedIndex = 0
     root.searching = false
-    resultsModel.clear()
+    // The filter belongs to the search it was picked in; the sort order is a
+    // preference and stays put until it is changed.
+    root.typeFilter = "all"
+    root.clearResults()
     root.closePreview()
     root.disarmPointer()
 
@@ -107,7 +148,7 @@ Item {
   function close() {
     root.opened = false
     debounce.stop()
-    resultsModel.clear()
+    root.clearResults()
     root.closePreview()
   }
 
@@ -128,7 +169,11 @@ Item {
     if (root.trimmedTerms(next).length < root.minQueryLength) {
       debounce.stop()
       root.searching = false
-      resultsModel.clear()
+      root.clearResults()
+      // Clearing the query empties the results, and the preview pane has to
+      // follow: without this it keeps showing the last folder's listing, which
+      // now belongs to nothing on screen.
+      root.syncPreview()
       return
     }
 
@@ -177,8 +222,8 @@ Item {
       return
 
     root.searching = false
-    resultsModel.clear()
 
+    var rows = []
     var lines = String(text || "").split("\n")
     for (var i = 0; i < lines.length; i++) {
       if (!lines[i])
@@ -186,7 +231,7 @@ Item {
       var cols = lines[i].split("\t")
       if (cols.length < 6)
         continue
-      resultsModel.append({
+      rows.push({
         kind: cols[0],
         name: cols[1],
         dir: cols[2],
@@ -196,7 +241,50 @@ Item {
       })
     }
 
-    root.selectedIndex = 0
+    root.allRows = rows
+    root.rebuildResults(false)
+  }
+
+  function clearResults() {
+    root.allRows = []
+    resultsModel.clear()
+  }
+
+  // The one place resultsModel is filled. Everything that changes what should
+  // be on screen -- new results, another type, the other sort order -- comes
+  // through here, so the list can never disagree with the chips above it.
+  function rebuildResults(keepSelection) {
+    var keepPath = ""
+    if (keepSelection) {
+      var current = root.snapshot(resultsModel, root.selectedIndex)
+      keepPath = current ? current.path : ""
+    }
+
+    var rows = root.visibleRows()
+
+    // A filter outlives the results it was picked in: search for invoices
+    // with Images still active and you would be looking at an empty list over
+    // a full one. Fall back rather than show nothing.
+    if (rows.length === 0 && root.allRows.length > 0 && root.typeFilter !== "all") {
+      root.typeFilter = "all"
+      rows = root.visibleRows()
+    }
+
+    resultsModel.clear()
+    for (var i = 0; i < rows.length; i++)
+      resultsModel.append(rows[i])
+
+    // Re-sorting moves the selected row rather than replacing it; following it
+    // to its new position keeps the cursor on the file the user was looking at.
+    var at = 0
+    for (var j = 0; keepPath && j < rows.length; j++) {
+      if (rows[j].path === keepPath) {
+        at = j
+        break
+      }
+    }
+
+    root.selectedIndex = at
     root.resultsRevision++
 
     // Fresh rows slide in under a pointer that never moved. Without re-arming
@@ -208,8 +296,102 @@ Item {
 
     Qt.callLater(function () {
       if (resultsModel.count > 0)
-        resultList.positionViewAtIndex(0, ListView.Contain)
+        resultList.positionViewAtIndex(root.selectedIndex, ListView.Contain)
     })
+  }
+
+  function visibleRows() {
+    var rows = []
+    for (var i = 0; i < root.allRows.length; i++) {
+      if (root.matchesFilter(root.typeFilter, root.allRows[i]))
+        rows.push(root.allRows[i])
+    }
+    return root.sortRows(rows)
+  }
+
+  // Newest first by default, because that is the question the overlay is
+  // usually being asked: which of these did I touch last.
+  function sortRows(rows) {
+    var direction = root.newestFirst ? -1 : 1
+    return rows.slice().sort(function (a, b) {
+      // A date stat could not read is unknown, not old, so those rows sit at
+      // the bottom whichever way round the list is.
+      var aUnknown = a.mtime ? 0 : 1
+      var bUnknown = b.mtime ? 0 : 1
+      if (aUnknown !== bUnknown)
+        return aUnknown - bUnknown
+      if (a.mtime !== b.mtime)
+        return (a.mtime - b.mtime) * direction
+      // Same second, which is common for a folder full of files written in one
+      // go: name order at least makes the list stable between renders.
+      return String(a.name).localeCompare(String(b.name))
+    })
+  }
+
+  // Folders and files split first, so "Files" means everything that is not a
+  // folder -- Documents and Images are narrower views inside it, the same way
+  // the d: and i: prefixes are.
+  function matchesFilter(id, row) {
+    if (!row || id === "all")
+      return true
+    if (id === "dir")
+      return row.kind === "dir"
+    if (row.kind === "dir")
+      return false
+    if (id === "file")
+      return true
+
+    var ext = root.extensionOf(row.name)
+    if (id === "image")
+      return root.imageExtensions.indexOf(ext) >= 0
+    if (id === "doc")
+      return root.documentExtensions.indexOf(ext) >= 0
+    if (id === "video")
+      return root.videoExtensions.indexOf(ext) >= 0
+    return true
+  }
+
+  function filterCount(id) {
+    var n = 0
+    for (var i = 0; i < root.allRows.length; i++) {
+      if (root.matchesFilter(id, root.allRows[i]))
+        n++
+    }
+    return n
+  }
+
+  function setFilter(id) {
+    if (root.typeFilter === id)
+      return
+    root.typeFilter = id
+    root.rebuildResults(true)
+  }
+
+  // Only over the types the results actually contain: stopping on an empty
+  // chip is a key press that does nothing, and All is always in the ring as
+  // the way back.
+  function cycleFilter(delta) {
+    var ids = []
+    for (var i = 0; i < root.typeFilters.length; i++) {
+      var id = root.typeFilters[i].id
+      if (id === "all" || root.filterCount(id) > 0)
+        ids.push(id)
+    }
+    if (ids.length < 2)
+      return
+
+    var at = ids.indexOf(root.typeFilter)
+    if (at < 0)
+      at = 0
+    root.typeFilter = ids[(at + delta + ids.length) % ids.length]
+    root.rebuildResults(true)
+  }
+
+  function setSortOrder(newest) {
+    if (root.newestFirst === newest)
+      return
+    root.newestFirst = newest
+    root.rebuildResults(true)
   }
 
   // --- Selection -----------------------------------------------------------
@@ -398,6 +580,15 @@ Item {
   // by the time a later delete reports back. A file can sit in both panes at
   // once (a search hit whose folder is open), so clear it from both.
   function removeRowByPath(path) {
+    // Out of the unfiltered set too: that is what a re-sort or a filter change
+    // rebuilds from, and a row left behind there would come back.
+    var kept = []
+    for (var k = 0; k < root.allRows.length; k++) {
+      if (root.allRows[k].path !== path)
+        kept.push(root.allRows[k])
+    }
+    root.allRows = kept
+
     for (var i = resultsModel.count - 1; i >= 0; i--) {
       if (String(resultsModel.get(i).path) === path)
         resultsModel.remove(i)
@@ -532,6 +723,50 @@ Item {
     })
   }
 
+  // Called whenever the preview pane changes what it is pointing at, which
+  // includes a re-sort that moved the row under the cursor.
+  function requestThumb() {
+    var row = root.previewRow
+    // A folder has its listing and an image is its own best preview; both are
+    // already better than a 1024 px cache entry.
+    var path = (row && row.kind !== "dir" && !root.isImageFile(row.kind, row.name, row.size)) ? row.path : ""
+
+    if (path === root.wantedThumbPath)
+      return
+
+    root.wantedThumbPath = path
+    root.previewThumb = ""
+    thumbDebounce.stop()
+
+    if (!path || root.thumbMisses[path])
+      return
+    thumbDebounce.restart()
+  }
+
+  function launchThumb() {
+    if (!root.wantedThumbPath || thumbProc.running)
+      return
+    root.activeThumbPath = root.wantedThumbPath
+    thumbProc.command = [root.thumbScript, root.activeThumbPath]
+    thumbProc.running = true
+  }
+
+  function applyThumb(text) {
+    var path = String(text || "").split("\n")[0].replace(/^\s+|\s+$/g, "")
+
+    // Mutated in place rather than reassigned: nothing binds to the object, and
+    // a fresh one on every miss would be a new allocation per arrow key.
+    if (!path)
+      root.thumbMisses[root.activeThumbPath] = true
+
+    // The cursor may have moved on while the thumbnailer ran, in which case
+    // this picture belongs to a row that is no longer on screen.
+    if (root.activeThumbPath === root.wantedThumbPath)
+      root.previewThumb = path ? Util.fileUrl(path) : ""
+  }
+
+  onPreviewRowChanged: root.requestThumb()
+
   function selectInFolder(delta) {
     if (folderModel.count === 0)
       return
@@ -627,6 +862,10 @@ Item {
   }
 
   readonly property var imageExtensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "tif", "tiff", "heic", "avif"]
+  // Kept in step with search.sh's d: list, so the chip and the prefix agree on
+  // what counts as a document.
+  readonly property var documentExtensions: ["pdf", "doc", "docx", "odt", "rtf", "txt", "md", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp", "epub"]
+  readonly property var videoExtensions: ["mp4", "mkv", "webm", "mov", "avi", "m4v", "mpg", "mpeg", "wmv", "flv", "ogv", "3gp", "ts"]
 
   function extensionOf(name) {
     return name.indexOf(".") >= 0 ? name.split(".").pop().toLowerCase() : ""
@@ -651,7 +890,7 @@ Item {
       return ""
     if (["mp3", "flac", "wav", "ogg", "m4a", "opus"].indexOf(ext) >= 0)
       return ""
-    if (["mp4", "mkv", "webm", "mov", "avi"].indexOf(ext) >= 0)
+    if (root.videoExtensions.indexOf(ext) >= 0)
       return ""
     if (["zip", "tar", "gz", "xz", "zst", "7z", "rar", "bz2"].indexOf(ext) >= 0)
       return ""
@@ -707,6 +946,31 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.applyResults(text)
+    }
+  }
+
+  // Longer than the search debounce: a thumbnailer costs a process and a page
+  // render, where a query costs an index lookup.
+  Timer {
+    id: thumbDebounce
+    interval: 220
+    repeat: false
+    onTriggered: root.launchThumb()
+  }
+
+  Process {
+    id: thumbProc
+
+    onExited: {
+      // Whatever the cursor landed on while this one ran is what gets asked
+      // for next; there is never more than one thumbnailer in flight.
+      if (root.wantedThumbPath && root.wantedThumbPath !== root.activeThumbPath)
+        root.launchThumb()
+    }
+
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyThumb(text)
     }
   }
 
@@ -818,7 +1082,16 @@ Item {
             else
               root.close()
             event.accepted = true
-          } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+          } else if (event.key === Qt.Key_Backtab || (event.key === Qt.Key_Tab && (event.modifiers & Qt.ShiftModifier))) {
+            // Shift+Tab arrives as Key_Backtab on most layouts and as a shifted
+            // Key_Tab on some; both mean the same thing here. In the folder
+            // pane it keeps Tab's old meaning, which is the way back out.
+            if (root.folderFocused)
+              root.folderFocused = false
+            else
+              root.cycleFilter(1)
+            event.accepted = true
+          } else if (event.key === Qt.Key_Tab) {
             if (root.folderFocused)
               root.folderFocused = false
             else
@@ -848,14 +1121,21 @@ Item {
               root.trashIndex(root.selectedIndex)
             event.accepted = true
           } else if (event.key === Qt.Key_Up) {
+            // Shift sorts instead of moving: up is ascending, oldest at the
+            // top. The folder pane lists by name and keeps that, so there the
+            // modifier is ignored and the arrow just moves.
             if (root.folderFocused)
               root.selectInFolder(-1)
+            else if (event.modifiers & Qt.ShiftModifier)
+              root.setSortOrder(false)
             else
               root.select(-1)
             event.accepted = true
           } else if (event.key === Qt.Key_Down) {
             if (root.folderFocused)
               root.selectInFolder(1)
+            else if (event.modifiers & Qt.ShiftModifier)
+              root.setSortOrder(true)
             else
               root.select(1)
             event.accepted = true
@@ -976,9 +1256,84 @@ Item {
           }
         }
 
+        // What the results are filtered to and which way round they are
+        // sorted, spelled out. Hidden until a search has returned something:
+        // an empty chip row over an empty list is furniture.
+        Item {
+          id: filterBar
+          width: parent.width
+          height: root.filterBarHeight
+          visible: root.filtersVisible
+
+          Row {
+            id: chipRow
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(6)
+
+            Repeater {
+              model: root.typeFilters
+
+              Rectangle {
+                id: chip
+                required property var modelData
+
+                readonly property int hits: root.filterCount(chip.modelData.id)
+                readonly property bool active: root.typeFilter === chip.modelData.id
+
+                width: chipLabel.implicitWidth + Style.space(20)
+                height: root.filterBarHeight
+                radius: root.cornerRadius
+                color: chip.active ? root.selectedBackground : Util.alpha(root.foreground, 0.07)
+
+                Text {
+                  id: chipLabel
+                  textFormat: Text.PlainText
+                  anchors.centerIn: parent
+                  text: chip.modelData.label + "  " + chip.hits
+                  color: chip.active ? root.selectedText : root.foreground
+                  // A type the results do not contain stays visible but dim:
+                  // "no images here" is an answer, and hiding the chip would
+                  // shuffle the row on every keystroke.
+                  opacity: chip.active ? 1 : (chip.hits === 0 ? 0.3 : 0.65)
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption + 1
+                }
+
+                MouseArea {
+                  anchors.fill: parent
+                  // A type with nothing in it is not a place to go: clicking
+                  // it would only bounce straight back to All.
+                  enabled: chip.hits > 0
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.setFilter(chip.modelData.id)
+                }
+              }
+            }
+          }
+
+          Text {
+            textFormat: Text.PlainText
+            anchors.left: chipRow.right
+            anchors.leftMargin: Style.space(12)
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: "⇧⇥ Filter    ⇧↑↓ " + (root.newestFirst ? "Newest first ↓" : "Oldest first ↑")
+            color: root.foreground
+            opacity: 0.45
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption + 1
+            horizontalAlignment: Text.AlignRight
+            elide: Text.ElideLeft
+          }
+        }
+
         Item {
           width: parent.width
-          height: parent.height - root.headerHeight - root.footerHeight - root.contentSpacing * 2
+          // Column leaves out an invisible child entirely, spacing included,
+          // so the chip row is only subtracted while it is actually there.
+          height: parent.height - root.headerHeight - root.footerHeight - root.contentSpacing * 2 - (root.filtersVisible ? root.filterBarHeight + root.contentSpacing : 0)
           clip: true
 
           Item {
@@ -1321,7 +1676,8 @@ Item {
               }
             }
 
-            // Anything else: the facts, since there is nothing to show.
+            // Anything else: a thumbnail if the file has one, and the facts
+            // either way.
             Column {
               anchors.left: parent.left
               anchors.right: parent.right
@@ -1329,6 +1685,25 @@ Item {
               anchors.leftMargin: root.contentMargin
               spacing: Style.space(10)
               visible: root.folderPath === "" && !root.previewIsImage
+
+              Image {
+                id: previewThumbnail
+                readonly property real aspect: implicitWidth > 0 ? implicitHeight / implicitWidth : 0
+
+                width: parent.width
+                // As tall as the picture wants, up to half the card. A page is
+                // taller than it is wide, so it is the cap that usually decides
+                // and the width that gives way.
+                height: visible ? Math.min(Math.round(width * previewThumbnail.aspect), Math.round(root.cardHeight * 0.5)) : 0
+                visible: root.previewThumb !== "" && status === Image.Ready
+                source: root.previewThumb
+                sourceSize.width: Math.max(1, root.previewWidth * 2)
+                sourceSize.height: Math.max(1, root.cardHeight)
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                smooth: true
+                mipmap: true
+              }
 
               Text {
                 textFormat: Text.PlainText
