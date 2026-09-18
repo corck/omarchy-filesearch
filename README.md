@@ -105,15 +105,20 @@ of this step or the next, the only way to open the overlay is clicking the bar
 widget. Add a binding to `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("F3", "File search", "omarchy-shell shell toggle io.github.corck.filesearch '{}'")
+o.bind("SUPER + F3", "File search", "omarchy-shell shell toggle io.github.corck.filesearch '{}'")
 ```
 
-Pick whatever key you like — <kbd>F3</kbd> and <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>F</kbd>
-are both unused by stock Omarchy, so either is a safe default:
+Pick whatever key you like — <kbd>Super</kbd>+<kbd>F3</kbd> and
+<kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>F</kbd> are both unused by stock Omarchy,
+so either is a safe default:
 
 ```lua
 o.bind("SUPER + CTRL + F", "File search", "omarchy-shell shell toggle io.github.corck.filesearch '{}'")
 ```
+
+Keep a modifier in it, though. A Hyprland binding is a global grab, so a bare
+<kbd>F3</kbd> is taken away from every window on the system — including the
+browser and the editor where it means find-again.
 
 Binding both is fine — they are ordinary Hyprland bindings running the same
 command, and the command toggles, so the same key closes the overlay again.
