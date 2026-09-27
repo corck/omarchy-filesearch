@@ -229,7 +229,11 @@ Item {
       if (!lines[i])
         continue
       var cols = lines[i].split("\t")
-      if (cols.length < 6)
+      // Exactly six, not at least six. A filename holding a tab would split
+      // into more, and every column past it would describe something else --
+      // the path column would name the parent directory. The scripts already
+      // refuse to emit such a row; this is the half that does not trust them.
+      if (cols.length !== 6)
         continue
       rows.push({
         kind: cols[0],
@@ -552,6 +556,14 @@ Item {
   }
 
   function enqueueDelete(path, permanent) {
+    // Last line before rm -rf. Every path these scripts produce is absolute;
+    // a relative one, or an empty one, means the row it came from was not the
+    // row it claimed to be, and the answer to that is to do nothing at all.
+    if (!path || path.charAt(0) !== "/") {
+      Util.execArgv(["omarchy-notification-send", "Delete refused", "Not an absolute path: " + path])
+      return
+    }
+
     var next = root.deleteQueue.slice()
     next.push({
       path: path,
@@ -702,7 +714,8 @@ Item {
       if (!lines[i])
         continue
       var cols = lines[i].split("\t")
-      if (cols.length < 6)
+      // Six exactly, for the reason given in applyResults.
+      if (cols.length !== 6)
         continue
       folderModel.append({
         kind: cols[0],

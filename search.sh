@@ -84,6 +84,12 @@ while IFS= read -r uri; do
   # The index outlives the files it points at; a deleted file is a stale row.
   [[ -e $path ]] || continue
 
+  # A tab or a newline in a filename is legal on Linux and would be emitted
+  # into the middle of this row, shifting every later column: the path column
+  # would then hold the parent directory, and the overlay hands that column
+  # to gio trash. A row that cannot be represented is dropped, not guessed.
+  [[ $path != *$'\t'* && $path != *$'\n'* ]] || continue
+
   # A typed mode keeps only that type. Directories stay out of it -- a folder
   # is not an image, and "i:" asked for images.
   if [[ -n $ext_filter ]]; then

@@ -216,6 +216,15 @@ Nothing is passed through a shell as text: every path reaches its command as a
 literal argv element, so a filename containing a quote, a space or a `$` is
 just a filename.
 
+The rows themselves are tab-separated, which makes a tab or a newline inside a
+filename a question of correctness rather than taste: it would land in the
+middle of a row and shift every column after it, so the column the overlay
+reads as the path would hold the parent directory instead. Three things stop
+that. The scripts never emit such a row. The overlay accepts a row only if it
+splits into exactly six fields, not merely six or more. And the delete queue
+refuses any path that is not absolute, because every path these scripts
+produce is.
+
 | File | |
 |---|---|
 | `FileSearch.qml` | the overlay: search, preview pane, actions |
@@ -251,7 +260,10 @@ thumbnailer per keystroke.
 - Some thumbnailers only unpack a preview image the file already carries
   rather than rendering it. An `.odt` or `.docx` saved without one therefore
   has no thumbnail, in this overlay and in your file manager alike.
-- Filenames containing a newline are skipped by the helper scripts.
+- Filenames containing a tab or a newline are skipped by the helper scripts.
+  Both are legal on Linux and both are separators in the row format, so such a
+  file cannot be described unambiguously and is left out rather than described
+  wrongly.
 - Thumbnails are skipped above 25 MB, where decoding costs more than a
   row-height preview is worth. The large preview honours the same limit.
 
