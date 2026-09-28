@@ -505,9 +505,8 @@ Item {
     if (!row)
       return
     root.close()
-    // No "--" separator: wl-copy does not document one, and every path here
-    // is absolute, so it can never be read as an option.
-    Util.execArgv(["wl-copy", row.path])
+    copyProc.payload = row.path
+    copyProc.running = true
   }
 
   // --- Delete --------------------------------------------------------------
@@ -969,6 +968,30 @@ Item {
     interval: 220
     repeat: false
     onTriggered: root.launchThumb()
+  }
+
+  // wl-copy is not like the other commands here. It keeps running for as long
+  // as it owns the clipboard, so whatever sits in its argv stays readable in
+  // /proc/<pid>/cmdline for minutes rather than milliseconds -- and readable
+  // by every local user, since /proc carries no hidepid by default. A filename
+  // is exactly what a 0700 home directory exists to keep to itself, so the
+  // path goes over stdin, which no other process can read. wl-copy takes its
+  // text there when given no argument, and appends the same trailing newline
+  // it appends for an argument, so the clipboard ends up byte for byte what it
+  // was before.
+  Process {
+    id: copyProc
+    property string payload: ""
+    command: ["wl-copy"]
+    stdinEnabled: true
+
+    onStarted: {
+      write(payload)
+      payload = ""
+      // wl-copy reads until end of input; without closing stdin it would wait
+      // there holding an empty clipboard.
+      stdinEnabled = false
+    }
   }
 
   Process {

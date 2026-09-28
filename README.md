@@ -216,6 +216,17 @@ Nothing is passed through a shell as text: every path reaches its command as a
 literal argv element, so a filename containing a quote, a space or a `$` is
 just a filename.
 
+Argv is public, though. `/proc/<pid>/cmdline` is world-readable unless `/proc`
+is mounted with `hidepid`, so anything in a command line can be read by any
+other local user for as long as that process lives. For most of the commands
+here that is a moment — `xdg-open`, `gio trash` and the rest are gone in
+milliseconds. `wl-copy` is the exception: it stays alive for as long as it owns
+the clipboard, so a path in its argv would sit there readable for minutes. It
+gets the path over stdin instead, which nothing else can read. Opening a file
+in an editor or a viewer still puts its path into that program's argv, exactly
+as it would from a file manager — that much is inherent to launching a program
+with a file.
+
 The rows themselves are tab-separated and newline-delimited, which makes a tab
 or a newline inside a filename a question of correctness rather than taste.
 Such a name lands in the middle of a row and shifts every column after it, so
