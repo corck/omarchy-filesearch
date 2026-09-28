@@ -216,14 +216,22 @@ Nothing is passed through a shell as text: every path reaches its command as a
 literal argv element, so a filename containing a quote, a space or a `$` is
 just a filename.
 
-The rows themselves are tab-separated, which makes a tab or a newline inside a
-filename a question of correctness rather than taste: it would land in the
-middle of a row and shift every column after it, so the column the overlay
-reads as the path would hold the parent directory instead. Three things stop
-that. The scripts never emit such a row. The overlay accepts a row only if it
-splits into exactly six fields, not merely six or more. And the delete queue
-refuses any path that is not absolute, because every path these scripts
-produce is.
+The rows themselves are tab-separated and newline-delimited, which makes a tab
+or a newline inside a filename a question of correctness rather than taste.
+Such a name lands in the middle of a row and shifts every column after it, so
+the column the overlay reads as the path would hold the parent directory; and
+a newline can do worse than shift, because it can end one record and begin
+another that nothing ever wrote. A file named `evil<newline>victim` sitting
+next to a real `victim` is a forged row pointing at the real one, and it is
+well-formed by every measure applied after the split.
+
+So the framing comes first: `list.sh` reads `find` output in NUL-delimited
+records, NUL being the one byte a filename cannot contain, and `search.sh`
+reads percent-encoded URIs, where a newline arrives as `%0A`. Neither can be
+made to see a record its producer did not write. On top of that, neither
+script emits a row whose path holds a tab or a newline, the overlay accepts a
+row only if it splits into exactly six fields rather than six or more, and the
+delete queue refuses any path that is not absolute.
 
 | File | |
 |---|---|
