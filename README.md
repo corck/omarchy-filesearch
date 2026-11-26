@@ -12,6 +12,15 @@ home directory, but nothing exposes that index to the keyboard. This does.
 
 ## What it does
 
+- **Names and paths, the way Everything does it.** Every term is a
+  case-insensitive substring and all of them must match: `pricing brief`
+  finds `pricing-brief.html` anywhere on the disk. A term with a `/` matches
+  the full path, so a pasted `/home/me/Work/project` (or `~/Work/project`,
+  quoted or as a `file://` URI) finds that folder, pinned first, and what is
+  in it; `Work/ invoice` finds files named *invoice* under a `Work` folder.
+  Answered by plocate's database in milliseconds. `node_modules`, `.git`,
+  `.cache` and similar trees stay out unless the query names one.
+- **Paste** with <kbd>Ctrl</kbd>+<kbd>V</kbd> or <kbd>Shift</kbd>+<kbd>Insert</kbd>.
 - **Full-text search**, not just filenames. A PDF whose name says nothing but
   whose text says "invoice" still shows up.
 - **Prefixes** to narrow the search: `f:` filenames, `o:` folders,
@@ -65,8 +74,10 @@ gsettings set org.freedesktop.Tracker3.Miner.Files ignored-directories "['.git',
 | Package | Used for |
 |---|---|
 | `localsearch`, `tinysparql` | the index and the `localsearch search` query |
+| `plocate` | name and path matching (`plocate-updatedb.timer` refreshes it daily) |
+| `perl` | fast folder test for `o:` name matches (optional) |
 | `glib2` | `gio trash` for the trash action, `gdbus` for revealing files |
-| `wl-clipboard` | `wl-copy` for copying a path |
+| `wl-clipboard` | `wl-copy` for copying a path, `wl-paste` for pasting a query |
 | `xdg-utils` | `xdg-open` to open files |
 | `xdg-terminal-exec` | terminal in the folder |
 | `uwsm` | launching apps into the session's systemd scope |
@@ -273,9 +284,13 @@ thumbnailer per keystroke.
 - Sorting is by modification time, which is what the filesystem reports for
   every file and folder. Creation time is not: most tools never set it and on
   many filesystems it reads back empty.
-- Sorting and filtering work on the hits the query returned, and a query
-  returns at most 40 — the index picks those by relevance. So "oldest first" is
-  the oldest of the best 40 matches, not the oldest match on the disk.
+- Sorting and filtering work on the hits the query returned: at most 150
+  name and path matches plus 40 per localsearch pass, 200 in all. So "oldest
+  first" is the oldest of those, not the oldest match on the disk.
+- Name and path matches come from plocate's database, which `updatedb`
+  refreshes once a day. A file made since then is found by name only through
+  localsearch, and a pasted path is always checked on the disk directly, with
+  its current contents listed. `sudo updatedb` refreshes it on demand.
 - Some thumbnailers only unpack a preview image the file already carries
   rather than rendering it. An `.odt` or `.docx` saved without one therefore
   has no thumbnail, in this overlay and in your file manager alike.

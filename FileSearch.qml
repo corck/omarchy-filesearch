@@ -186,7 +186,50 @@ Item {
     return body.replace(/^\s+|\s+$/g, "")
   }
 
+  // The query as a filesystem path, the same way search.sh reads it: quotes
+  // and a file:// scheme dropped, a leading ~ expanded, trailing slashes cut.
+  // Empty when it is not an absolute path. A row at exactly this path is what
+  // was pasted, so it is pinned above the sort.
+  function queryPath(text) {
+    var p = root.trimmedTerms(text)
+    var quoted = /^'(.*)'$/.exec(p) || /^"(.*)"$/.exec(p)
+    if (quoted)
+      p = quoted[1]
+    if (p.indexOf("file://") === 0) {
+      try {
+        p = decodeURIComponent(p.slice(7))
+      } catch (e) {
+        return ""
+      }
+    }
+    if (p === "~" || p.indexOf("~/") === 0)
+      p = (Quickshell.env("HOME") || "") + p.slice(1)
+    if (p.length > 1)
+      p = p.replace(/\/+$/, "")
+    return p.charAt(0) === "/" ? p : ""
+  }
+
+  // Ctrl+V, Shift+Insert. Clipboard text arrives through wl-paste; a copied
+  // multi-line selection collapses onto one line, since the query has one.
+  function paste() {
+    if (pasteProc.running)
+      return
+    pasteProc.running = true
+  }
+
+  function insertPasted(text) {
+    var s = String(text || "").replace(/[\r\n\t]+/g, " ").replace(/^\s+|\s+$/g, "")
+    if (!s)
+      return
+    if (s.length > 1024)
+      s = s.slice(0, 1024)
+    root.folderFocused = false
+    root.setQuery(root.query + s)
+  }
+
   function modeLabel(text) {
+    if (root.trimmedTerms(text).indexOf("/") >= 0 || root.queryPath(text))
+      return "Name + path"
     if (text.indexOf("f:") === 0)
       return "Filenames"
     if (text.indexOf("o:") === 0)
@@ -317,7 +360,12 @@ Item {
   // usually being asked: which of these did I touch last.
   function sortRows(rows) {
     var direction = root.newestFirst ? -1 : 1
+    var pinned = root.queryPath(root.query)
     return rows.slice().sort(function (a, b) {
+      // The pasted path itself leads, whatever the order: it is what was asked
+      // for, and below it come the things in it.
+      if (pinned && (a.path === pinned) !== (b.path === pinned))
+        return a.path === pinned ? -1 : 1
       // A date stat could not read is unknown, not old, so those rows sit at
       // the bottom whichever way round the list is.
       var aUnknown = a.mtime ? 0 : 1
@@ -961,6 +1009,16 @@ Item {
     }
   }
 
+  Process {
+    id: pasteProc
+    command: ["wl-paste", "--no-newline", "--type", "text"]
+
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.insertPasted(text)
+    }
+  }
+
   // Longer than the search debounce: a thumbnailer costs a process and a page
   // render, where a query costs an index lookup.
   Timer {
@@ -1144,6 +1202,9 @@ Item {
             event.accepted = true
           } else if (event.key === Qt.Key_E && (event.modifiers & Qt.ControlModifier)) {
             root.openEditor(root.selectedIndex)
+            event.accepted = true
+          } else if ((event.key === Qt.Key_V && (event.modifiers & Qt.ControlModifier)) || (event.key === Qt.Key_Insert && (event.modifiers & Qt.ShiftModifier))) {
+            root.paste()
             event.accepted = true
           } else if (Util.editsFilter(event, root.query)) {
             root.setQuery(Util.editedFilter(event, root.query))
@@ -1584,7 +1645,7 @@ Item {
 
               Text {
                 textFormat: Text.PlainText
-                text: root.trimmedTerms(root.query).length < root.minQueryLength ? "Type to search the localsearch index" : (root.searching ? "Searching…" : "No matches for “" + root.trimmedTerms(root.query) + "”")
+                text: root.trimmedTerms(root.query).length < root.minQueryLength ? "Type a name, a path or words inside a file" : (root.searching ? "Searching…" : "No matches for “" + root.trimmedTerms(root.query) + "”")
                 color: root.foreground
                 opacity: 0.7
                 font.family: root.fontFamily
@@ -1596,7 +1657,7 @@ Item {
               Text {
                 textFormat: Text.PlainText
                 visible: root.trimmedTerms(root.query).length < root.minQueryLength
-                text: "Prefixes:  f: filename   o: folders   d: documents   i: images"
+                text: "Names, paths (^V to paste) and contents.   Prefixes:  f: filename   o: folders   d: documents   i: images"
                 color: root.foreground
                 opacity: 0.45
                 font.family: root.fontFamily
